@@ -2,6 +2,7 @@
 const nextConfig = {
   images: {
     domains: ['images.unsplash.com', 'via.placeholder.com'],
+    unoptimized: false,
   },
   env: {
     CUSTOM_KEY: process.env.CUSTOM_KEY,
@@ -18,7 +19,12 @@ const nextConfig = {
         ]
       }
     ]
-  }
+  },
+  // Production optimizations
+  swcMinify: true,
+  compress: true,
+  poweredByHeader: false,
+  generateEtags: false,
 }
 
 module.exports = nextConfig
