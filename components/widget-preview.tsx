@@ -84,13 +84,13 @@ export function WidgetPreview({
         return (
           <div className="p-6 text-center">
             <div className="text-3xl font-bold text-green-400 mb-2">
-              {currentData?.price}
+              {(currentData as any)?.price}
             </div>
             <div className="text-lg text-green-300 mb-1">
-              {currentData?.change}
+              {(currentData as any)?.change}
             </div>
             <div className="text-sm text-gray-400">
-              Vol: {currentData?.volume}
+              Vol: {(currentData as any)?.volume}
             </div>
           </div>
         )
@@ -102,13 +102,13 @@ export function WidgetPreview({
               <Heart className="w-5 h-5 text-orange-500" />
               <div>
                 <div className="font-bold text-orange-500">
-                  {currentData?.amount}
+                  {(currentData as any)?.amount}
                 </div>
                 <div className="text-sm text-gray-300">
-                  {currentData?.message}
+                  {(currentData as any)?.message}
                 </div>
                 <div className="text-xs text-gray-400">
-                  - {currentData?.user}
+                  - {(currentData as any)?.user}
                 </div>
               </div>
             </div>
@@ -122,10 +122,10 @@ export function WidgetPreview({
               <TrendingUp className="w-5 h-5 text-green-400" />
               <div>
                 <div className="font-bold text-green-400">
-                  BUY {currentData?.amount} {currentData?.token}
+                  BUY {(currentData as any)?.amount} {(currentData as any)?.token}
                 </div>
                 <div className="text-sm text-gray-300">
-                  {currentData?.wallet}
+                  {(currentData as any)?.wallet}
                 </div>
               </div>
             </div>
@@ -136,16 +136,16 @@ export function WidgetPreview({
         return (
           <div className="p-3 border-b border-gray-700">
             <div className="flex items-center gap-2">
-              {currentData?.badge && (
+              {(currentData as any)?.badge && (
                 <Badge variant="secondary" className="text-xs">
-                  {currentData.badge}
+                  {(currentData as any).badge}
                 </Badge>
               )}
               <span className="font-medium text-blue-400">
-                {currentData?.user}:
+                {(currentData as any)?.user}:
               </span>
               <span className="text-gray-300">
-                {currentData?.message}
+                {(currentData as any)?.message}
               </span>
             </div>
           </div>
@@ -155,16 +155,16 @@ export function WidgetPreview({
         return (
           <div className="p-4 text-center">
             <div className="text-2xl font-bold text-orange-500 mb-2">
-              {currentData?.burned}
+              {(currentData as any)?.burned}
             </div>
             <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
               <div 
                 className="bg-gradient-to-r from-orange-500 to-red-500 h-2 rounded-full transition-all duration-1000"
-                style={{ width: currentData?.burned || '0%' }}
+                style={{ width: (currentData as any)?.burned || '0%' }}
               />
             </div>
             <div className="text-sm text-gray-400">
-              {currentData?.remaining} remaining
+              {(currentData as any)?.remaining} remaining
             </div>
           </div>
         )
@@ -173,14 +173,14 @@ export function WidgetPreview({
         return (
           <div className="p-6 text-center">
             <div className="text-4xl font-bold text-pink-500 mb-2 font-mono">
-              {currentData?.time}
+              {(currentData as any)?.time}
             </div>
             <div className="text-sm text-gray-400 mb-1">
               TIME LEFT
             </div>
             <div className="flex justify-center gap-4 text-xs text-gray-500">
-              <span>{currentData?.extensions} extensions</span>
-              <span>{currentData?.donations} raised</span>
+              <span>{(currentData as any)?.extensions} extensions</span>
+              <span>{(currentData as any)?.donations} raised</span>
             </div>
           </div>
         )

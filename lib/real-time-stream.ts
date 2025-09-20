@@ -305,8 +305,8 @@ export class StreamManager {
     this.streams.set(name, stream)
     
     // Forward all events to global handlers
-    stream.on('message', (data) => this.emit('message', { stream: name, data }))
-    stream.on('error', (error) => this.emit('error', { stream: name, error }))
+    stream.on('message', (data: any) => this.emit('message', { stream: name, data }))
+    stream.on('error', (error: any) => this.emit('error', { stream: name, error }))
     stream.on('connected', () => this.emit('connected', { stream: name }))
     stream.on('disconnected', () => this.emit('disconnected', { stream: name }))
     

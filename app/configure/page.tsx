@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { AuthButton } from "@/components/auth-button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useAnalytics } from "@/hooks/use-analytics"
 import { WidgetTemplates } from "@/components/widget-templates"
 import { WidgetTemplate } from "@/lib/widget-templates"
@@ -38,6 +39,117 @@ import { WidgetShare } from "@/components/widgets/widget-share"
 // import { WidgetSchedulerInterface } from "@/components/widget-scheduler-interface"
 // import { WidgetTheme } from "@/lib/widget-themes"
 // import { WidgetAnimation } from "@/lib/widget-animations"
+
+// Helper component for navigation items with tooltips
+function NavItem({ 
+  href, 
+  icon: Icon, 
+  label, 
+  isCollapsed, 
+  onClick 
+}: { 
+  href?: string
+  icon: any
+  label: string
+  isCollapsed: boolean
+  onClick?: () => void
+}) {
+  const content = (
+    <div className={`flex items-center gap-2 text-gray-400 hover:text-white transition-colors ${
+      isCollapsed ? "justify-center" : ""
+    } ${onClick ? "cursor-pointer" : ""}`}>
+      <Icon className="w-4 h-4" />
+      {!isCollapsed && <span className="text-sm">{label}</span>}
+    </div>
+  )
+
+  if (isCollapsed) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {href ? (
+              <Link href={href} className="block">
+                {content}
+              </Link>
+            ) : (
+              <button onClick={onClick} className="w-full">
+                {content}
+              </button>
+            )}
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p>{label}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )
+  }
+
+  return href ? (
+    <Link href={href}>
+      {content}
+    </Link>
+  ) : (
+    <button onClick={onClick} className="w-full">
+      {content}
+    </button>
+  )
+}
+
+// Helper component for configure section items with tooltips
+function ConfigureItem({ 
+  icon: Icon, 
+  label, 
+  subtitle,
+  isActive,
+  isCollapsed, 
+  onClick 
+}: { 
+  icon: any
+  label: string
+  subtitle?: string
+  isActive: boolean
+  isCollapsed: boolean
+  onClick: () => void
+}) {
+  const content = (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all ${
+        isActive
+          ? "bg-gradient-to-r from-orange-400 to-amber-500 text-white"
+          : "text-gray-400 hover:text-white hover:bg-gray-800"
+      } ${isCollapsed ? "justify-center" : ""}`}
+    >
+      <Icon className="w-5 h-5 flex-shrink-0" />
+      {!isCollapsed && (
+        <div className="text-left">
+          <div className="font-medium">{label}</div>
+          {subtitle && <div className="text-xs text-gray-400">{subtitle}</div>}
+        </div>
+      )}
+    </button>
+  )
+
+  if (isCollapsed) {
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {content}
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p>{label}</p>
+            {subtitle && <p className="text-xs text-gray-400">{subtitle}</p>}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )
+  }
+
+  return content
+}
 
 export default function ConfigurePage() {
   const router = useRouter()
@@ -694,60 +806,48 @@ export default function ConfigurePage() {
         {/* Auth Button */}
         <div className="p-4 border-b border-gray-800">
           <div className={isCollapsed ? "flex justify-center" : ""}>
-            <AuthButton />
+            <AuthButton isCollapsed={isCollapsed} />
           </div>
         </div>
 
         {/* Analytics Link */}
         <div className="p-4 border-b border-gray-800">
-          <Link
-            href="/analytics"
-            className={`flex items-center gap-2 text-gray-400 hover:text-white transition-colors ${
-              isCollapsed ? "justify-center" : ""
-            }`}
-          >
-            <BarChart3 className="w-4 h-4" />
-            {!isCollapsed && <span className="text-sm">Analytics</span>}
-          </Link>
+          <NavItem 
+            href="/analytics" 
+            icon={BarChart3} 
+            label="Analytics" 
+            isCollapsed={isCollapsed} 
+          />
         </div>
 
         {/* Webhooks Link */}
         <div className="p-4 border-b border-gray-800">
-          <Link
-            href="/webhooks"
-            className={`flex items-center gap-2 text-gray-400 hover:text-white transition-colors ${
-              isCollapsed ? "justify-center" : ""
-            }`}
-          >
-            <Webhook className="w-4 h-4" />
-            {!isCollapsed && <span className="text-sm">Webhooks</span>}
-          </Link>
+          <NavItem 
+            href="/webhooks" 
+            icon={Webhook} 
+            label="Webhooks" 
+            isCollapsed={isCollapsed} 
+          />
         </div>
 
         {/* Community Link */}
         <div className="p-4 border-b border-gray-800">
-          <Link
-            href="/community"
-            className={`flex items-center gap-2 text-gray-400 hover:text-white transition-colors ${
-              isCollapsed ? "justify-center" : ""
-            }`}
-          >
-            <Share2 className="w-4 h-4" />
-            {!isCollapsed && <span className="text-sm">Community</span>}
-          </Link>
+          <NavItem 
+            href="/community" 
+            icon={Share2} 
+            label="Community" 
+            isCollapsed={isCollapsed} 
+          />
         </div>
 
         {/* Templates Link */}
         <div className="p-4 border-b border-gray-800">
-          <button
+          <NavItem 
+            icon={FileText} 
+            label="Templates" 
+            isCollapsed={isCollapsed}
             onClick={() => setShowTemplates(true)}
-            className={`flex items-center gap-2 text-gray-400 hover:text-white transition-colors w-full ${
-              isCollapsed ? "justify-center" : ""
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            {!isCollapsed && <span className="text-sm">Templates</span>}
-          </button>
+          />
         </div>
 
         {/* Configure Section */}
@@ -762,70 +862,44 @@ export default function ConfigurePage() {
               const isActive = activeSection === item.id
 
               return (
-                <button
+                <ConfigureItem
                   key={item.id}
+                  icon={Icon}
+                  label={item.label}
+                  subtitle={item.subtitle}
+                  isActive={isActive}
+                  isCollapsed={isCollapsed}
                   onClick={() => activate(item.id)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all ${
-                    isActive
-                      ? "bg-gradient-to-r from-orange-400 to-amber-500 text-white"
-                      : "text-gray-400 hover:text-white hover:bg-gray-800"
-                  } ${isCollapsed ? "justify-center" : ""}`}
-                >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  {!isCollapsed && (
-                    <div className="text-left">
-                      <div className="font-medium">{item.label}</div>
-                      <div className="text-xs text-gray-400">{item.subtitle}</div>
-                    </div>
-                  )}
-                </button>
+                />
               )
             })}
             {/* Growth & Branding quick access */}
-            <button
+            <ConfigureItem
+              icon={Send}
+              label="Branding & Sharing"
+              subtitle="Community links, QR, typography"
+              isActive={false}
+              isCollapsed={isCollapsed}
               onClick={() => brandingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all text-gray-400 hover:text-white hover:bg-gray-800 ${
-                isCollapsed ? "justify-center" : ""
-              }`}
-            >
-              <Send className="w-5 h-5 flex-shrink-0" />
-              {!isCollapsed && (
-                <div className="text-left">
-                  <div className="font-medium">Branding & Sharing</div>
-                  <div className="text-xs text-gray-400">Community links, QR, typography</div>
-                </div>
-              )}
-            </button>
+            />
             {/* Monetization */}
-            <button
+            <ConfigureItem
+              icon={Heart}
+              label="Monetization"
+              subtitle="Donation badge, calls to action"
+              isActive={false}
+              isCollapsed={isCollapsed}
               onClick={() => monetizationRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all text-gray-400 hover:text-white hover:bg-gray-800 ${
-                isCollapsed ? "justify-center" : ""
-              }`}
-            >
-              <Heart className="w-5 h-5 flex-shrink-0" />
-              {!isCollapsed && (
-                <div className="text-left">
-                  <div className="font-medium">Monetization</div>
-                  <div className="text-xs text-gray-400">Donation badge, calls to action</div>
-                </div>
-              )}
-            </button>
+            />
             {/* Community Growth */}
-            <button
+            <ConfigureItem
+              icon={MessageSquare}
+              label="Community Growth"
+              subtitle="Ticker, messages, social CTA"
+              isActive={false}
+              isCollapsed={isCollapsed}
               onClick={() => growthRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-              className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all text-gray-400 hover:text-white hover:bg-gray-800 ${
-                isCollapsed ? "justify-center" : ""
-              }`}
-            >
-              <MessageSquare className="w-5 h-5 flex-shrink-0" />
-              {!isCollapsed && (
-                <div className="text-left">
-                  <div className="font-medium">Community Growth</div>
-                  <div className="text-xs text-gray-400">Ticker, messages, social CTA</div>
-                </div>
-              )}
-            </button>
+            />
           </div>
         </div>
 

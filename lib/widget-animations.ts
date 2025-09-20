@@ -97,7 +97,7 @@ export const WIDGET_ANIMATIONS: WidgetAnimation[] = [
     config: {
       type: 'bounce',
       duration: 800,
-      easing: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+      easing: 'ease-in-out',
       fillMode: 'both'
     },
     css: 'bounce-in',

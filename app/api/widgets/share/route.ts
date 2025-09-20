@@ -14,9 +14,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { widgetId, widgetType, config, isPublic, description } = await request.json()
+    const { name, widgetType, config, isPublic, description } = await request.json()
 
-    if (!widgetId || !widgetType || !config) {
+    if (!name || !widgetType || !config) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     // Create shared widget
     const sharedWidget = await db.sharedWidget.create({
       data: {
-        widgetId,
+        name,
         widgetType,
         config: JSON.stringify(config),
         shareToken,

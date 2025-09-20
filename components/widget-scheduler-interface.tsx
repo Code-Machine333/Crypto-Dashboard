@@ -47,7 +47,7 @@ export function WidgetSchedulerInterface({
   useEffect(() => {
     // Load existing rules
     setRules(widgetScheduler.getAllRules())
-    setIsRunning(widgetScheduler.isConnected())
+    setIsRunning(false) // Will be updated by event listeners
 
     // Listen for scheduler events
     const handleRuleUpdate = () => {

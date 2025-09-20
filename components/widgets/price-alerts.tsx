@@ -31,7 +31,7 @@ interface PriceAlertsProps {
 
 export function PriceAlerts({ config = {}, onConfigChange }: PriceAlertsProps) {
   const [alerts, setAlerts] = useState<PriceAlert[]>([])
-  const [newAlert, setNewAlert] = useState({ symbol: '', targetPrice: 0, condition: 'above' as const })
+  const [newAlert, setNewAlert] = useState<{ symbol: string; targetPrice: number; condition: 'above' | 'below' }>({ symbol: '', targetPrice: 0, condition: 'above' })
   const [cryptoPrices, setCryptoPrices] = useState<CryptoPrice[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
