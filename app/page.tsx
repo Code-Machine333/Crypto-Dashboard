@@ -367,14 +367,14 @@ export default function StreamDotFunLanding() {
                   <div className="text-xs text-gray-400">By widget</div>
                   </div>
                 <div className="flex items-center gap-4">
-                  <ResponsiveContainer width={140} height={140}>
-                    <PieChart>
+                  <div className="w-[140px] h-[140px]">
+                    <PieChart width={140} height={140}>
                       <Pie cx="50%" cy="50%" isAnimationActive animationDuration={600} data={(metrics?.distribution || [60,25,15]).map((v,i)=>({name:['Market Cap','Donations','Buy Bot'][i], value:v}))} dataKey="value" innerRadius={42} outerRadius={60} paddingAngle={2}>
                         {["#fb923c", "#f59e0b", "#fbbf24"].map((c,i)=> <Cell key={i} fill={c} stroke="#00000080" />)}
                       </Pie>
                       <Tooltip content={<PieTooltip />} />
                     </PieChart>
-                  </ResponsiveContainer>
+                  </div>
                   <div className="text-xs text-gray-300 space-y-1">
                     {['Market Cap','Donations','Buy Bot'].map((l,i)=> (
                       <div key={i} className="flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full" style={{background: ["#fb923c", "#f59e0b", "#fbbf24"][i]}} /> {l}</div>

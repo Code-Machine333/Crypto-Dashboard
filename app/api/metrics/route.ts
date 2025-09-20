@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { jsonOK } from "@/lib/http"
 
 export const dynamic = "force-dynamic"
 
@@ -18,7 +18,7 @@ export async function GET() {
     "New preset saved",
     "Buy Bot spiked 20%",
   ]
-  return NextResponse.json({ trend, distribution, notifications })
+  return jsonOK({ trend, distribution, notifications })
 }
 
 

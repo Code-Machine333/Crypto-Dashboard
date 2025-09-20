@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { jsonOK } from "@/lib/http"
 
 export const dynamic = "force-dynamic"
 
@@ -9,7 +9,7 @@ export async function GET() {
     user: names[Math.floor(Math.random() * names.length)],
     amount: Math.round(100 + Math.random() * 1000),
   }))
-  return NextResponse.json({ buys })
+  return jsonOK({ buys })
 }
 
 

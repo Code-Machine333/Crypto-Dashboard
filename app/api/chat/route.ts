@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server"
+import { jsonOK } from "@/lib/http"
 
 export const dynamic = "force-dynamic"
 
@@ -11,7 +11,7 @@ const pool = [
 
 export async function GET() {
   const messages = Array.from({ length: 5 }).map(() => pool[Math.floor(Math.random() * pool.length)])
-  return NextResponse.json({ messages })
+  return jsonOK({ messages })
 }
 
 

@@ -16,17 +16,34 @@ import {
   FileText,
   Send,
   Twitter,
-  Play
+  Play,
+  Webhook,
+  Share2
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { AuthButton } from "@/components/auth-button"
+import { useAnalytics } from "@/hooks/use-analytics"
+import { WidgetTemplates } from "@/components/widget-templates"
+import { WidgetTemplate } from "@/lib/widget-templates"
+import { WalletSelectionModal } from "@/components/wallet-selection-modal"
+import { PortfolioTracker } from "@/components/widgets/portfolio-tracker"
+import { PriceAlerts } from "@/components/widgets/price-alerts"
+import { WidgetShare } from "@/components/widgets/widget-share"
+// import { WidgetThemeSelector } from "@/components/widget-theme-selector"
+// import { WidgetExportPanel } from "@/components/widget-export-panel"
+// import { WidgetAnimationController } from "@/components/widget-animation-controller"
+// import { WidgetSchedulerInterface } from "@/components/widget-scheduler-interface"
+// import { WidgetTheme } from "@/lib/widget-themes"
+// import { WidgetAnimation } from "@/lib/widget-animations"
 
 export default function ConfigurePage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const { trackConfigure, trackPresetSave, trackPresetLoad } = useAnalytics()
   const [activeSection, setActiveSection] = useState("buy-bot")
   const [colorStyle, setColorStyle] = useState("light")
   const [tokenCA, setTokenCA] = useState("")
@@ -53,6 +70,13 @@ export default function ConfigurePage() {
   const [selectedToken, setSelectedToken] = useState("")
   const [minDonationAmount, setMinDonationAmount] = useState("0.01")
   const [customDonationUrl, setCustomDonationUrl] = useState("")
+  // Wallet connection state
+  const [isWalletConnected, setIsWalletConnected] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [walletError, setWalletError] = useState("")
+  const [availableTokens, setAvailableTokens] = useState<string[]>([])
+  const [showWalletModal, setShowWalletModal] = useState(false)
+  const [selectedWalletType, setSelectedWalletType] = useState("")
   const [progressBarStart, setProgressBarStart] = useState("")
   const [burnedTokensIgnore, setBurnedTokensIgnore] = useState("")
   const [burnGoals, setBurnGoals] = useState([
@@ -87,14 +111,23 @@ export default function ConfigurePage() {
   const [typoWeight, setTypoWeight] = useState(600)
   const [typoTracking, setTypoTracking] = useState(0)
   // Animation tuning (for preview box)
-  const [animStyle, setAnimStyle] = useState<"fade" | "slide" | "zoom">("fade")
+  const [animStyle, setAnimStyle] = useState<"fade" | "slide" | "zoom" | "bounce" | "glow">("fade")
   const [animSpeed, setAnimSpeed] = useState(0.6)
   // Presets (localStorage)
   const [presetName, setPresetName] = useState("")
-  const [presetList, setPresetList] = useState<string[]>([])
+  const [presetList, setPresetList] = useState<Array<{id: string, name: string, widget: string}>>([])
+  const [presetLoading, setPresetLoading] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [showThemes, setShowThemes] = useState(false)
+  const [showExport, setShowExport] = useState(false)
+  const [showAnimations, setShowAnimations] = useState(false)
+  const [showScheduler, setShowScheduler] = useState(false)
+  const [currentTheme, setCurrentTheme] = useState<string>("crypto-orange")
+  const [currentAnimation, setCurrentAnimation] = useState<string>("fade-in")
   const brandingRef = useRef<HTMLDivElement | null>(null)
   const monetizationRef = useRef<HTMLDivElement | null>(null)
   const growthRef = useRef<HTMLDivElement | null>(null)
+  const widgetPreviewRef = useRef<HTMLDivElement | null>(null)
   // Monetization & Growth toggles
   const [showDonationBadge, setShowDonationBadge] = useState(false)
   const [donationBadgeText, setDonationBadgeText] = useState("Donate")
@@ -110,6 +143,9 @@ export default function ConfigurePage() {
     { id: "market-cap", label: "Market Cap", subtitle: "Live market data", icon: BarChart3 },
     { id: "chat-widget", label: "Chat Widget", subtitle: "Chat integration", icon: MessageSquare },
     { id: "donations", label: "Donations", subtitle: "Crypto donations", icon: Heart },
+    { id: "portfolio-tracker", label: "Portfolio Tracker", subtitle: "Track your investments", icon: BarChart3 },
+    { id: "price-alerts", label: "Price Alerts", subtitle: "Get notified of price changes", icon: Clock },
+    { id: "widget-share", label: "Widget Share", subtitle: "Share widgets with community", icon: Share2 },
     { id: "burn-goals", label: "Burn Goals", subtitle: "Token burn tracking", icon: Flame },
     { id: "subathon", label: "Subathon", subtitle: "Timer & goals", icon: Clock },
   ]
@@ -118,6 +154,13 @@ export default function ConfigurePage() {
     { id: "documentation", label: "Documentation", icon: FileText },
     { id: "telegram", label: "Telegram", icon: Send },
     { id: "twitter", label: "Twitter", icon: Twitter },
+  ]
+
+  const advancedItems = [
+    { id: "themes", label: "Themes", icon: FileText },
+    { id: "animations", label: "Animations", icon: Play },
+    { id: "export", label: "Export", icon: Send },
+    { id: "scheduler", label: "Scheduler", icon: Clock },
   ]
 
   // Read ?widget= from URL and activate matching section
@@ -137,12 +180,18 @@ export default function ConfigurePage() {
     router.replace(`/configure?${sp.toString()}`)
   }
 
-  // Presets: load list at mount
+  // Presets: load list from database at mount
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("stf_presets")
-      if (raw) setPresetList(JSON.parse(raw))
-    } catch {}
+    const loadPresets = async () => {
+      try {
+        const res = await fetch('/api/presets')
+        const data = await res.json()
+        if (data.ok) {
+          setPresetList(data.data)
+        }
+      } catch {}
+    }
+    loadPresets()
   }, [])
 
   // Try offline QR generation via CDN-loaded library; fall back to remote API in render if not available
@@ -187,110 +236,398 @@ export default function ConfigurePage() {
 
   }, [enableQR, qrMode, qrCustomUrl, customDonationUrl, walletAddress, qrSize, qrColor, qrBg])
 
-  const savePreset = () => {
-    if (!presetName.trim()) return
-    const payload = {
-      activeSection,
-      colorStyle,
-      tokenCA,
-      buyAmounts,
-      selectedAudio,
-      audioVolume,
-      marketCapGoals,
-      ttsToken,
-      chatStyle,
-      removeAvatars,
-      widgetWidth,
-      widgetHeight,
-      blacklistedWords,
-      walletAddress,
-      selectedToken,
-      minDonationAmount,
-      customDonationUrl,
-      progressBarStart,
-      burnedTokensIgnore,
-      burnGoals,
-      timerHours,
-      timerMinutes,
-      timerSeconds,
-      timeAddedPerBuy,
-      timeRemovedPerSell,
-      minTransactionValue,
-      telegramHandle,
-      xHandle,
-      showWatermark,
-      enableQR, qrMode, qrCustomUrl, qrSize, qrPosition, qrColor, qrBg, qrRadius,
-      typoFont, typoWeight, typoTracking,
-      animStyle, animSpeed,
-      // Monetization & Growth additions
-      showDonationBadge, donationBadgeText, badgePosition, badgeColor,
-      showGrowthTicker, growthMessage, tickerPosition, tickerSpeed,
-    }
+  const savePreset = async () => {
+    if (!presetName.trim() || presetLoading) return
+    setPresetLoading(true)
     try {
-      localStorage.setItem(`stf_preset_${presetName}`, JSON.stringify(payload))
-      const next = Array.from(new Set([presetName, ...presetList]))
-      setPresetList(next)
-      localStorage.setItem("stf_presets", JSON.stringify(next))
+      const payload = {
+        activeSection,
+        colorStyle,
+        tokenCA,
+        buyAmounts,
+        selectedAudio,
+        audioVolume,
+        marketCapGoals,
+        ttsToken,
+        chatStyle,
+        removeAvatars,
+        widgetWidth,
+        widgetHeight,
+        blacklistedWords,
+        walletAddress,
+        selectedToken,
+        minDonationAmount,
+        customDonationUrl,
+        progressBarStart,
+        burnedTokensIgnore,
+        burnGoals,
+        timerHours,
+        timerMinutes,
+        timerSeconds,
+        timeAddedPerBuy,
+        timeRemovedPerSell,
+        minTransactionValue,
+        telegramHandle,
+        xHandle,
+        showWatermark,
+        enableQR, qrMode, qrCustomUrl, qrSize, qrPosition, qrColor, qrBg, qrRadius,
+        typoFont, typoWeight, typoTracking,
+        animStyle, animSpeed,
+        // Monetization & Growth additions
+        showDonationBadge, donationBadgeText, badgePosition, badgeColor,
+        showGrowthTicker, growthMessage, tickerPosition, tickerSpeed,
+      }
+      
+      const res = await fetch('/api/presets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: presetName,
+          widget: activeSection,
+          config: payload
+        })
+      })
+      
+      const data = await res.json()
+      if (data.ok) {
+        // Track preset save
+        trackPresetSave(activeSection, data.data?.id, {
+          presetName,
+          configSize: Object.keys(payload).length,
+        })
+        
+        // Refresh preset list
+        const listRes = await fetch('/api/presets')
+        const listData = await listRes.json()
+        if (listData.ok) {
+          setPresetList(listData.data)
+          setPresetName("")
+        }
+      }
     } catch {}
+    setPresetLoading(false)
   }
 
-  const loadPreset = (name: string) => {
+  const loadPreset = async (presetId: string) => {
+    if (!presetId || presetLoading) return
+    setPresetLoading(true)
     try {
-      const raw = localStorage.getItem(`stf_preset_${name}`)
-      if (!raw) return
-      const p = JSON.parse(raw)
-      setActiveSection(p.activeSection ?? activeSection)
-      setColorStyle(p.colorStyle ?? colorStyle)
-      setTokenCA(p.tokenCA ?? tokenCA)
-      setBuyAmounts(p.buyAmounts ?? buyAmounts)
-      setSelectedAudio(p.selectedAudio ?? selectedAudio)
-      setAudioVolume(p.audioVolume ?? audioVolume)
-      setMarketCapGoals(p.marketCapGoals ?? marketCapGoals)
-      setTtsToken(p.ttsToken ?? ttsToken)
-      setChatStyle(p.chatStyle ?? chatStyle)
-      setRemoveAvatars(!!p.removeAvatars)
-      setWidgetWidth(p.widgetWidth ?? widgetWidth)
-      setWidgetHeight(p.widgetHeight ?? widgetHeight)
-      setBlacklistedWords(p.blacklistedWords ?? blacklistedWords)
-      setWalletAddress(p.walletAddress ?? walletAddress)
-      setSelectedToken(p.selectedToken ?? selectedToken)
-      setMinDonationAmount(p.minDonationAmount ?? minDonationAmount)
-      setCustomDonationUrl(p.customDonationUrl ?? customDonationUrl)
-      setProgressBarStart(p.progressBarStart ?? progressBarStart)
-      setBurnedTokensIgnore(p.burnedTokensIgnore ?? burnedTokensIgnore)
-      setBurnGoals(p.burnGoals ?? burnGoals)
-      setTimerHours(p.timerHours ?? timerHours)
-      setTimerMinutes(p.timerMinutes ?? timerMinutes)
-      setTimerSeconds(p.timerSeconds ?? timerSeconds)
-      setTimeAddedPerBuy(p.timeAddedPerBuy ?? timeAddedPerBuy)
-      setTimeRemovedPerSell(p.timeRemovedPerSell ?? timeRemovedPerSell)
-      setMinTransactionValue(p.minTransactionValue ?? minTransactionValue)
-      setTelegramHandle(p.telegramHandle ?? telegramHandle)
-      setXHandle(p.xHandle ?? xHandle)
-      setShowWatermark(!!p.showWatermark)
-      setEnableQR(!!p.enableQR)
-      setQrMode(p.qrMode ?? qrMode)
-      setQrCustomUrl(p.qrCustomUrl ?? qrCustomUrl)
-      setQrSize(p.qrSize ?? qrSize)
-      setQrPosition(p.qrPosition ?? qrPosition)
-      setQrColor(p.qrColor ?? qrColor)
-      setQrBg(p.qrBg ?? qrBg)
-      setQrRadius(p.qrRadius ?? qrRadius)
-      setTypoFont(p.typoFont ?? typoFont)
-      setTypoWeight(p.typoWeight ?? typoWeight)
-      setTypoTracking(p.typoTracking ?? typoTracking)
-      setAnimStyle(p.animStyle ?? animStyle)
-      setAnimSpeed(p.animSpeed ?? animSpeed)
-      // Monetization & Growth additions
-      setShowDonationBadge(!!p.showDonationBadge)
-      setDonationBadgeText(p.donationBadgeText ?? donationBadgeText)
-      setBadgePosition(p.badgePosition ?? badgePosition)
-      setBadgeColor(p.badgeColor ?? badgeColor)
-      setShowGrowthTicker(!!p.showGrowthTicker)
-      setGrowthMessage(p.growthMessage ?? growthMessage)
-      setTickerPosition(p.tickerPosition ?? tickerPosition)
-      setTickerSpeed(p.tickerSpeed ?? tickerSpeed)
+      const res = await fetch('/api/presets')
+      const data = await res.json()
+      if (data.ok) {
+        const preset = data.data.find((p: any) => p.id === presetId)
+        if (preset) {
+          const p = preset.config
+          setActiveSection(p.activeSection ?? activeSection)
+          setColorStyle(p.colorStyle ?? colorStyle)
+          setTokenCA(p.tokenCA ?? tokenCA)
+          setBuyAmounts(p.buyAmounts ?? buyAmounts)
+          setSelectedAudio(p.selectedAudio ?? selectedAudio)
+          setAudioVolume(p.audioVolume ?? audioVolume)
+          setMarketCapGoals(p.marketCapGoals ?? marketCapGoals)
+          setTtsToken(p.ttsToken ?? ttsToken)
+          setChatStyle(p.chatStyle ?? chatStyle)
+          setRemoveAvatars(!!p.removeAvatars)
+          setWidgetWidth(p.widgetWidth ?? widgetWidth)
+          setWidgetHeight(p.widgetHeight ?? widgetHeight)
+          setBlacklistedWords(p.blacklistedWords ?? blacklistedWords)
+          setWalletAddress(p.walletAddress ?? walletAddress)
+          setSelectedToken(p.selectedToken ?? selectedToken)
+          setMinDonationAmount(p.minDonationAmount ?? minDonationAmount)
+          setCustomDonationUrl(p.customDonationUrl ?? customDonationUrl)
+          setProgressBarStart(p.progressBarStart ?? progressBarStart)
+          setBurnedTokensIgnore(p.burnedTokensIgnore ?? burnedTokensIgnore)
+          setBurnGoals(p.burnGoals ?? burnGoals)
+          setTimerHours(p.timerHours ?? timerHours)
+          setTimerMinutes(p.timerMinutes ?? timerMinutes)
+          setTimerSeconds(p.timerSeconds ?? timerSeconds)
+          setTimeAddedPerBuy(p.timeAddedPerBuy ?? timeAddedPerBuy)
+          setTimeRemovedPerSell(p.timeRemovedPerSell ?? timeRemovedPerSell)
+          setMinTransactionValue(p.minTransactionValue ?? minTransactionValue)
+          setTelegramHandle(p.telegramHandle ?? telegramHandle)
+          setXHandle(p.xHandle ?? xHandle)
+          setShowWatermark(!!p.showWatermark)
+          setEnableQR(!!p.enableQR)
+          setQrMode(p.qrMode ?? qrMode)
+          setQrCustomUrl(p.qrCustomUrl ?? qrCustomUrl)
+          setQrSize(p.qrSize ?? qrSize)
+          setQrPosition(p.qrPosition ?? qrPosition)
+          setQrColor(p.qrColor ?? qrColor)
+          setQrBg(p.qrBg ?? qrBg)
+          setQrRadius(p.qrRadius ?? qrRadius)
+          setTypoFont(p.typoFont ?? typoFont)
+          setTypoWeight(p.typoWeight ?? typoWeight)
+          setTypoTracking(p.typoTracking ?? typoTracking)
+          setAnimStyle(p.animStyle ?? animStyle)
+          setAnimSpeed(p.animSpeed ?? animSpeed)
+          // Monetization & Growth additions
+          setShowDonationBadge(!!p.showDonationBadge)
+          setDonationBadgeText(p.donationBadgeText ?? donationBadgeText)
+          setBadgePosition(p.badgePosition ?? badgePosition)
+          setBadgeColor(p.badgeColor ?? badgeColor)
+          setShowGrowthTicker(!!p.showGrowthTicker)
+          setGrowthMessage(p.growthMessage ?? growthMessage)
+          setTickerPosition(p.tickerPosition ?? tickerPosition)
+          setTickerSpeed(p.tickerSpeed ?? tickerSpeed)
+          
+          // Track preset load
+          trackPresetLoad(preset.widget, presetId, {
+            presetName: preset.name,
+            configSize: Object.keys(p).length,
+          })
+        }
+      }
     } catch {}
+    setPresetLoading(false)
+  }
+
+  const shareWidget = async () => {
+    try {
+      const widgetName = prompt("Enter a name for your shared widget:")
+      if (!widgetName) return
+
+      const description = prompt("Enter a description (optional):") || undefined
+      const tags = prompt("Enter tags separated by commas (optional):")?.split(',').map(t => t.trim()).filter(Boolean) || undefined
+
+      const config = {
+        activeSection,
+        colorStyle,
+        tokenCA,
+        buyAmounts,
+        selectedAudio,
+        audioVolume,
+        marketCapGoals,
+        ttsToken,
+        chatStyle,
+        removeAvatars,
+        widgetWidth,
+        widgetHeight,
+        blacklistedWords,
+        walletAddress,
+        selectedToken,
+        minDonationAmount,
+        customDonationUrl,
+        progressBarStart,
+        burnedTokensIgnore,
+        burnGoals,
+        timerHours,
+        timerMinutes,
+        timerSeconds,
+        timeAddedPerBuy,
+        timeRemovedPerSell,
+        minTransactionValue,
+        enableQR,
+        qrMode,
+        qrCustomUrl,
+        qrSize,
+        qrPosition,
+        qrColor,
+        qrBg,
+        qrRadius,
+        typoFont,
+        typoWeight,
+        typoTracking,
+        animStyle,
+        animSpeed,
+        showDonationBadge,
+        donationBadgeText,
+        badgePosition,
+        badgeColor,
+        showGrowthTicker,
+        growthMessage,
+        tickerPosition,
+        tickerSpeed,
+      }
+
+      const res = await fetch('/api/shared-widgets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: widgetName,
+          description,
+          widgetType: activeSection,
+          config,
+          isPublic: true,
+          tags,
+        }),
+      })
+
+      const data = await res.json()
+      if (data.ok) {
+        const shareUrl = `${window.location.origin}/shared/${data.data.shareToken}`
+        navigator.clipboard.writeText(shareUrl)
+        alert(`Widget shared! Link copied to clipboard: ${shareUrl}`)
+      } else {
+        alert('Failed to share widget: ' + (data.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Failed to share widget:', error)
+      alert('Failed to share widget')
+    }
+  }
+
+  // Wallet connection functions
+  const openWalletModal = () => {
+    setShowWalletModal(true)
+    setWalletError("")
+  }
+
+  const handleWalletSelect = async (walletType: string) => {
+    setIsConnecting(true)
+    setSelectedWalletType(walletType)
+    setWalletError("")
+    
+    try {
+      // Check for specific wallet availability
+      let wallet = null
+      
+      if (walletType === 'phantom' && typeof window !== 'undefined' && (window as any).solana?.isPhantom) {
+        wallet = (window as any).solana
+      } else if (walletType === 'solflare' && typeof window !== 'undefined' && (window as any).solflare) {
+        wallet = (window as any).solflare
+      } else if (walletType === 'coinbase' && typeof window !== 'undefined' && (window as any).coinbaseWallet) {
+        wallet = (window as any).coinbaseWallet
+      }
+      
+      if (wallet) {
+        // Real wallet connection
+        const response = await wallet.connect()
+        
+        if (response.publicKey) {
+          const publicKey = response.publicKey.toString()
+          setWalletAddress(publicKey)
+          setIsWalletConnected(true)
+          
+          // Mock token fetching - in real implementation, this would fetch from Solana RPC
+          setAvailableTokens([
+            "SOL - Solana",
+            "USDC - USD Coin", 
+            "USDT - Tether USD",
+            "RAY - Raydium",
+            "SRM - Serum"
+          ])
+          
+          // Auto-select first token if none selected
+          if (!selectedToken) {
+            setSelectedToken("SOL - Solana")
+          }
+        }
+      } else {
+        // Fallback for demo purposes - simulate wallet connection
+        setTimeout(() => {
+          const mockAddress = "9hAv86Yo" + Math.random().toString(36).substring(2, 15)
+          setWalletAddress(mockAddress)
+          setIsWalletConnected(true)
+          setAvailableTokens([
+            "SOL - Solana",
+            "USDC - USD Coin", 
+            "USDT - Tether USD",
+            "RAY - Raydium",
+            "SRM - Serum"
+          ])
+          if (!selectedToken) {
+            setSelectedToken("SOL - Solana")
+          }
+        }, 1000)
+      }
+    } catch (error) {
+      console.error('Wallet connection failed:', error)
+      setWalletError(`Failed to connect ${walletType} wallet. Please try again.`)
+    } finally {
+      setIsConnecting(false)
+    }
+  }
+
+  const disconnectWallet = () => {
+    setWalletAddress("")
+    setSelectedToken("")
+    setIsWalletConnected(false)
+    setAvailableTokens([])
+    setWalletError("")
+  }
+
+  const handleTemplateSelect = (template: WidgetTemplate) => {
+    // Apply template configuration
+    const config = template.config
+    
+    // Map template config to our state variables
+    if (config.colorStyle) setColorStyle(config.colorStyle)
+    if (config.animation) setAnimStyle(config.animation)
+    if (config.fontSize) {
+      // Map fontSize to typography settings
+      const fontSizeMap = {
+        'small': { weight: 400, tracking: -0.5 },
+        'medium': { weight: 500, tracking: 0 },
+        'large': { weight: 600, tracking: 0.5 }
+      }
+      const settings = fontSizeMap[config.fontSize as keyof typeof fontSizeMap]
+      if (settings) {
+        setTypoWeight(settings.weight)
+        setTypoTracking(settings.tracking)
+      }
+    }
+    
+    // Set the active section based on template category
+    const categoryMap = {
+      'Market Data': 'market-cap',
+      'Donations': 'donations',
+      'Trading': 'buy-bot',
+      'Community': 'chat-widget',
+      'Goals': 'burn-goals',
+      'Events': 'subathon-timer'
+    }
+    const widgetType = categoryMap[template.category as keyof typeof categoryMap]
+    if (widgetType) {
+      setActiveSection(widgetType)
+    }
+    
+    // Close templates view
+    setShowTemplates(false)
+    
+    // Show success message
+    alert(`Template "${template.name}" applied successfully!`)
+  }
+
+  // const handleThemeSelect = (theme: WidgetTheme) => {
+  //   setCurrentTheme(theme.id)
+  //   // Apply theme colors and settings
+  //   if (theme.colors.primary) setColorStyle(theme.id)
+  //   if (theme.typography.fontFamily) setTypoFont(theme.typography.fontFamily)
+  //   if (theme.typography.fontWeight) setTypoWeight(theme.typography.fontWeight)
+  //   if (theme.typography.letterSpacing) setTypoTracking(theme.typography.letterSpacing)
+  //   if (theme.animations.style) setAnimStyle(theme.animations.style)
+  //   if (theme.animations.speed) setAnimSpeed(theme.animations.speed)
+  // }
+
+  // const handleAnimationSelect = (animation: WidgetAnimation) => {
+  //   setCurrentAnimation(animation.id)
+  //   setAnimStyle(animation.config.type as any)
+  //   setAnimSpeed(animation.config.duration / 1000)
+  // }
+
+  const handleAdvancedSection = (section: string) => {
+    // Close all other advanced sections
+    setShowTemplates(false)
+    setShowThemes(false)
+    setShowExport(false)
+    setShowAnimations(false)
+    setShowScheduler(false)
+    
+    // Open the selected section
+    switch (section) {
+      case 'themes':
+        setShowThemes(true)
+        break
+      case 'animations':
+        setShowAnimations(true)
+        break
+      case 'export':
+        setShowExport(true)
+        break
+      case 'scheduler':
+        setShowScheduler(true)
+        break
+    }
   }
 
   // Build a sharable widget URL with the current configuration encoded as base64 JSON
@@ -352,6 +689,65 @@ export default function ConfigurePage() {
             <ArrowLeft className="w-4 h-4" />
             {!isCollapsed && <span className="text-sm">Back to Home</span>}
           </Link>
+        </div>
+
+        {/* Auth Button */}
+        <div className="p-4 border-b border-gray-800">
+          <div className={isCollapsed ? "flex justify-center" : ""}>
+            <AuthButton />
+          </div>
+        </div>
+
+        {/* Analytics Link */}
+        <div className="p-4 border-b border-gray-800">
+          <Link
+            href="/analytics"
+            className={`flex items-center gap-2 text-gray-400 hover:text-white transition-colors ${
+              isCollapsed ? "justify-center" : ""
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            {!isCollapsed && <span className="text-sm">Analytics</span>}
+          </Link>
+        </div>
+
+        {/* Webhooks Link */}
+        <div className="p-4 border-b border-gray-800">
+          <Link
+            href="/webhooks"
+            className={`flex items-center gap-2 text-gray-400 hover:text-white transition-colors ${
+              isCollapsed ? "justify-center" : ""
+            }`}
+          >
+            <Webhook className="w-4 h-4" />
+            {!isCollapsed && <span className="text-sm">Webhooks</span>}
+          </Link>
+        </div>
+
+        {/* Community Link */}
+        <div className="p-4 border-b border-gray-800">
+          <Link
+            href="/community"
+            className={`flex items-center gap-2 text-gray-400 hover:text-white transition-colors ${
+              isCollapsed ? "justify-center" : ""
+            }`}
+          >
+            <Share2 className="w-4 h-4" />
+            {!isCollapsed && <span className="text-sm">Community</span>}
+          </Link>
+        </div>
+
+        {/* Templates Link */}
+        <div className="p-4 border-b border-gray-800">
+          <button
+            onClick={() => setShowTemplates(true)}
+            className={`flex items-center gap-2 text-gray-400 hover:text-white transition-colors w-full ${
+              isCollapsed ? "justify-center" : ""
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            {!isCollapsed && <span className="text-sm">Templates</span>}
+          </button>
         </div>
 
         {/* Configure Section */}
@@ -457,17 +853,70 @@ export default function ConfigurePage() {
             })}
           </div>
         </div>
+
+        {/* Advanced Features Section */}
+        <div className="p-4 border-t border-gray-800">
+          {!isCollapsed && (
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">ADVANCED</div>
+          )}
+
+          <div className="space-y-2">
+            {advancedItems.map((item) => {
+              const Icon = item.icon
+              const isActive = (item.id === 'themes' && showThemes) ||
+                              (item.id === 'animations' && showAnimations) ||
+                              (item.id === 'export' && showExport) ||
+                              (item.id === 'scheduler' && showScheduler)
+
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => handleAdvancedSection(item.id)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all ${
+                    isActive 
+                      ? "text-orange-500 bg-orange-500/10 border border-orange-500/20" 
+                      : "text-gray-400 hover:text-white hover:bg-gray-800"
+                  } ${isCollapsed ? "justify-center" : ""}`}
+                >
+                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  {!isCollapsed && <span className="font-medium">{item.label}</span>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 flex" style={{justifyContent: "center"}}>
         {/* Main Configuration Form */}
         <div className="flex-1 p-8 max-w-4xl">
-          <div className="bg-black/30 backdrop-blur-sm border border-gray-800 rounded-lg p-8">
+          {showTemplates ? (
+            <div className="bg-black/30 backdrop-blur-sm border border-gray-800 rounded-lg p-8">
+              <div className="mb-6">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowTemplates(false)}
+                  className="mb-4"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Configuration
+                </Button>
+              </div>
+              <WidgetTemplates 
+                onSelectTemplate={handleTemplateSelect}
+                currentWidget={activeSection}
+              />
+            </div>
+          ) : (
+            <div className="bg-black/30 backdrop-blur-sm border border-gray-800 rounded-lg p-8">
             <h1 className="text-2xl font-bold mb-8">
               {activeSection === "buy-bot" && "Buy Bot Widget Configuration"}
               {activeSection === "market-cap" && "Market Cap Widget Configuration"}
               {activeSection === "chat-widget" && "Chat Widget Configuration"}
               {activeSection === "donations" && "Donations Widget Configuration"}
+              {activeSection === "portfolio-tracker" && "Portfolio Tracker Configuration"}
+              {activeSection === "price-alerts" && "Price Alerts Configuration"}
+              {activeSection === "widget-share" && "Widget Share Configuration"}
               {activeSection === "burn-goals" && "Burn Goals Widget Configuration"}
               {activeSection === "subathon" && "Subathon Widget Configuration"}
             </h1>
@@ -668,9 +1117,31 @@ export default function ConfigurePage() {
                   
                   {/* Select Wallet Button */}
                   <div className="mb-6">
-                    <Button className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-semibold">
-                      Select Wallet
-                    </Button>
+                    {!isWalletConnected ? (
+                      <Button 
+                        onClick={openWalletModal}
+                        disabled={isConnecting}
+                        className="bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 text-white px-6 py-3 rounded-lg font-semibold"
+                      >
+                        {isConnecting ? "Connecting..." : "Select Wallet"}
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-4">
+                        <Button 
+                          onClick={disconnectWallet}
+                          variant="outline"
+                          className="border-red-500 text-red-400 hover:bg-red-500/10 px-4 py-2"
+                        >
+                          Disconnect
+                        </Button>
+                        <div className="text-green-400 text-sm">
+                          ✓ {selectedWalletType ? selectedWalletType.charAt(0).toUpperCase() + selectedWalletType.slice(1) : 'Wallet'} Connected: {walletAddress.slice(0, 8)}...{walletAddress.slice(-8)}
+                        </div>
+                      </div>
+                    )}
+                    {walletError && (
+                      <p className="text-red-400 text-sm mt-2">{walletError}</p>
+                    )}
                   </div>
 
                   {/* Important Information Box */}
@@ -691,10 +1162,11 @@ export default function ConfigurePage() {
                   <div className="mb-6">
                     <Label className="text-lg font-medium mb-3 block">Your Wallet Address</Label>
                     <Input
-                      placeholder="Connect your wallet to set the wallet address"
+                      placeholder={isWalletConnected ? "Wallet connected" : "Connect your wallet to set the wallet address"}
                       value={walletAddress}
                       onChange={(e) => setWalletAddress(e.target.value)}
-                      className="bg-black/50 border-gray-700 text-white"
+                      disabled={isWalletConnected}
+                      className="bg-black/50 border-gray-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -702,13 +1174,22 @@ export default function ConfigurePage() {
                   <div className="mb-6">
                     <Label className="text-lg font-medium mb-3 block">Select Your Token</Label>
                     <div className="relative">
-                      <Input
-                        placeholder="Connect wallet to see your tokens"
+                      <select
                         value={selectedToken}
                         onChange={(e) => setSelectedToken(e.target.value)}
-                        className="bg-black/50 border-gray-700 text-white pr-10"
-                      />
-                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        disabled={!isWalletConnected}
+                        className="w-full bg-black/50 border border-gray-700 text-white pr-10 py-2 px-3 rounded-md disabled:opacity-50 disabled:cursor-not-allowed appearance-none"
+                      >
+                        <option value="">
+                          {isWalletConnected ? "Select a token" : "Connect wallet to see your tokens"}
+                        </option>
+                        {availableTokens.map((token) => (
+                          <option key={token} value={token} className="bg-black text-white">
+                            {token}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
                         <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
@@ -731,10 +1212,11 @@ export default function ConfigurePage() {
                   <div className="mb-6">
                     <Label className="text-lg font-medium mb-3 block">Custom Donation URL Name</Label>
                     <Input
-                      placeholder="Connect your wallet to set the donation token name"
+                      placeholder={isWalletConnected ? "Enter custom donation URL name" : "Connect your wallet to set the donation token name"}
                       value={customDonationUrl}
                       onChange={(e) => setCustomDonationUrl(e.target.value)}
-                      className="bg-black/50 border-gray-700 text-white"
+                      disabled={!isWalletConnected}
+                      className="bg-black/50 border-gray-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -1065,19 +1547,62 @@ export default function ConfigurePage() {
               <Label className="text-lg font-medium mb-3 block">Presets</Label>
               <div className="flex flex-col sm:flex-row gap-3">
                 <Input placeholder="Preset name" value={presetName} onChange={(e)=>setPresetName(e.target.value)} className="bg-black/50 border-gray-700 text-white sm:w-64" />
-                <Button onClick={savePreset} className="bg-gradient-to-r from-orange-400 to-amber-500 hover:from-orange-500 hover:to-amber-600 text-white">Save Preset</Button>
+                <Button onClick={savePreset} disabled={presetLoading} className="bg-gradient-to-r from-orange-400 to-amber-500 hover:from-orange-500 hover:to-amber-600 text-white">
+                  {presetLoading ? "Saving..." : "Save Preset"}
+                </Button>
                 {presetList.length > 0 && (
                   <div className="flex items-center gap-2">
                     <Label className="text-sm">Load:</Label>
-                    <select onChange={(e)=>loadPreset(e.target.value)} className="bg-black/50 border border-gray-700 rounded px-2 py-2 text-sm">
+                    <select onChange={(e)=>loadPreset(e.target.value)} disabled={presetLoading} className="bg-black/50 border border-gray-700 rounded px-2 py-2 text-sm">
                       <option value="">Select preset</option>
-                      {presetList.map(n => (
-                        <option key={n} value={n}>{n}</option>
+                      {presetList.map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.widget})</option>
                       ))}
                     </select>
                   </div>
                 )}
               </div>
+              {presetList.length > 0 && (
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {presetList.map(p => (
+                    <div key={p.id} className="flex items-center justify-between bg-black/30 border border-gray-700 rounded px-3 py-2">
+                      <div>
+                        <div className="text-white text-sm font-medium">{p.name}</div>
+                        <div className="text-gray-400 text-xs">{p.widget}</div>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button size="sm" variant="outline" onClick={() => loadPreset(p.id)} disabled={presetLoading} className="text-xs px-2 py-1">
+                          Load
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={async () => {
+                          if (confirm('Delete this preset?')) {
+                            try {
+                              await fetch(`/api/presets?id=${p.id}`, { method: 'DELETE' })
+                              const res = await fetch('/api/presets')
+                              const data = await res.json()
+                              if (data.ok) setPresetList(data.data)
+                            } catch {}
+                          }
+                        }} disabled={presetLoading} className="text-xs px-2 py-1 text-red-400 hover:text-red-300">
+                          Del
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Share Widget */}
+            <div className="mb-8">
+              <Label className="text-lg font-medium mb-3 block">Share Widget</Label>
+              <Button
+                onClick={shareWidget}
+                className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white"
+              >
+                <Share2 className="w-4 h-4 mr-2" />
+                Share to Community
+              </Button>
             </div>
 
             {/* Monetization Section */}
@@ -1240,9 +1765,9 @@ export default function ConfigurePage() {
                             <span className="absolute -top-2 -right-2 inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-400 text-black text-[10px] font-bold">✓</span>
                           )}
                   </Button>
-                      )
-                    })}
-                  </div>
+                        )
+                      })}
+                    </div>
 
                   {selectedAudio === "Clean" && (
                     <div className="mt-6 rounded-lg border border-gray-700 bg-black/40 p-5">
@@ -1269,14 +1794,15 @@ export default function ConfigurePage() {
                             </span>
                             <span className="text-white font-medium">Tier {tier}</span>
                           </button>
-                ))}
-              </div>
-            </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               </>
             )}
           </div>
+          )}
         </div>
 
         <div className="w-[500px] p-8">
@@ -1426,6 +1952,48 @@ export default function ConfigurePage() {
                   {/* Empty black box for donations preview */}
                 </div>
               )}
+              {activeSection === "portfolio-tracker" && (
+                <div className="w-full h-full bg-gray-800 rounded-lg p-4 overflow-y-auto">
+                  <PortfolioTracker 
+                    config={{
+                      showProfitLoss: true,
+                      showPercentages: true,
+                      theme: 'dark'
+                    }}
+                    onConfigChange={(config) => {
+                      console.log('Portfolio tracker config changed:', config)
+                    }}
+                  />
+                </div>
+              )}
+              {activeSection === "price-alerts" && (
+                <div className="w-full h-full bg-gray-800 rounded-lg p-4 overflow-y-auto">
+                  <PriceAlerts 
+                    config={{
+                      maxAlerts: 10,
+                      theme: 'dark',
+                      soundEnabled: true
+                    }}
+                    onConfigChange={(config) => {
+                      console.log('Price alerts config changed:', config)
+                    }}
+                  />
+                </div>
+              )}
+              {activeSection === "widget-share" && (
+                <div className="w-full h-full bg-gray-800 rounded-lg p-4 overflow-y-auto">
+                  <WidgetShare 
+                    widgetId="current-widget"
+                    widgetType={activeSection}
+                    config={{
+                      // Current widget configuration
+                    }}
+                    onShare={(shareData) => {
+                      console.log('Widget shared:', shareData)
+                    }}
+                  />
+                </div>
+              )}
               {activeSection === "burn-goals" && (
                 <div className="w-full h-full flex items-center justify-center">
                   <div className="text-white font-bold text-2xl">Tokens Burnt: 500.0K</div>
@@ -1561,6 +2129,13 @@ export default function ConfigurePage() {
           </div>
         </div>
       </div>
+
+      {/* Wallet Selection Modal */}
+      <WalletSelectionModal
+        isOpen={showWalletModal}
+        onClose={() => setShowWalletModal(false)}
+        onWalletSelect={handleWalletSelect}
+      />
     </div>
   )
 }

@@ -4,6 +4,8 @@ import { Inter, JetBrains_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
 import "./globals.css"
+import { Providers } from "@/components/providers"
+import { CustomCursor } from "@/components/custom-cursor"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -31,8 +33,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`font-sans ${inter.variable} ${jetbrainsMono.variable} antialiased`}>
-        <Suspense fallback={null}>{children}</Suspense>
-        <Analytics />
+        <Providers>
+          <CustomCursor />
+          <Suspense fallback={null}>{children}</Suspense>
+          <Analytics />
+        </Providers>
       </body>
     </html>
   )

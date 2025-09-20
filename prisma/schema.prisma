@@ -1,0 +1,226 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  accounts      Account[]
+  sessions      Session[]
+  presets       Preset[]
+  analytics     WidgetAnalytics[]
+  metrics       UserMetrics?
+  verificationTokens VerificationToken[]
+  resetTokens   ResetToken[]
+  webhooks      Webhook[]
+  ownedWidgets  SharedWidget[] @relation("WidgetOwner")
+  collaborations WidgetCollaborator[] @relation("WidgetCollaborator")
+  comments      WidgetComment[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model VerificationToken {
+  id         String   @id @default(cuid())
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  createdAt  DateTime @default(now())
+
+  @@unique([identifier, token])
+  @@index([token])
+  @@index([expires])
+}
+
+model Preset {
+  id          String   @id @default(cuid())
+  name        String
+  widget      String   // e.g. 'market-cap', 'donations', etc.
+  config      String   // JSON stringified configuration
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  event     String
+  meta      String?
+  userId    String?
+  createdAt DateTime @default(now())
+}
+
+model WidgetAnalytics {
+  id          String   @id @default(cuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  widgetType  String   // 'market-cap', 'donations', etc.
+  widgetId    String?  // preset ID or custom widget ID
+  event       String   // 'view', 'interaction', 'share', 'configure'
+  metadata    String?  // JSON string with additional data
+  userAgent   String?
+  ipAddress   String?
+  referrer    String?
+  createdAt   DateTime @default(now())
+  
+  @@index([userId, widgetType])
+  @@index([event, createdAt])
+}
+
+model UserMetrics {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totalWidgetViews  Int      @default(0)
+  totalInteractions Int      @default(0)
+  totalShares       Int      @default(0)
+  lastActiveAt      DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model WebhookLog {
+  id          String   @id @default(cuid())
+  webhookId   String
+  webhook     Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event       String
+  payload     String   // JSON payload sent
+  response    String?  // Response from webhook endpoint
+  statusCode  Int?
+  success     Boolean
+  error       String?
+  triggeredAt DateTime @default(now())
+  
+  @@index([webhookId, triggeredAt])
+  @@index([success])
+}
+
+model Webhook {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  url         String
+  secret      String?  // For webhook signature verification
+  events      String   // JSON array of event types to listen for
+  isActive    Boolean  @default(true)
+  retryCount  Int      @default(0)
+  lastTriggered DateTime?
+  logs        WebhookLog[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([userId])
+  @@index([isActive])
+}
+
+model SharedWidget {
+  id          String   @id @default(cuid())
+  ownerId     String
+  owner       User     @relation("WidgetOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  widgetType  String
+  config      String   // JSON configuration
+  isPublic    Boolean  @default(false)
+  shareToken  String   @unique @default(cuid())
+  viewCount   Int      @default(0)
+  likeCount   Int      @default(0)
+  tags        String?  // JSON array of tags
+  collaborators WidgetCollaborator[]
+  comments    WidgetComment[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([ownerId])
+  @@index([isPublic])
+  @@index([shareToken])
+}
+
+model WidgetCollaborator {
+  id          String   @id @default(cuid())
+  widgetId    String
+  widget      SharedWidget @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation("WidgetCollaborator", fields: [userId], references: [id], onDelete: Cascade)
+  role        String   // 'viewer', 'editor', 'admin'
+  permissions String   // JSON array of permissions
+  invitedAt   DateTime @default(now())
+  acceptedAt  DateTime?
+  
+  @@unique([widgetId, userId])
+  @@index([userId])
+}
+
+model WidgetComment {
+  id          String   @id @default(cuid())
+  widgetId    String
+  widget      SharedWidget @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content     String
+  parentId    String?  // For replies
+  parent      WidgetComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies     WidgetComment[] @relation("CommentReplies")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([widgetId])
+  @@index([userId])
+}
+
+
+model ResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expires   DateTime
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([expires])
+}

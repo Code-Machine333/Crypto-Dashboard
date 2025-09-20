@@ -2,12 +2,15 @@
 
 import { useSearchParams } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
+import { useSSE } from "@/hooks/use-sse"
+// import { useAnalytics } from "@/hooks/use-analytics"
 
 type Cfg = Record<string, any>
 
 export default function WidgetRuntime({ params }: { params: { section: string } }) {
   const sp = useSearchParams()
   const [cfg, setCfg] = useState<Cfg | null>(null)
+  // const { trackView, trackInteraction } = useAnalytics()
 
   // decode ?cfg= base64 JSON
   useEffect(() => {
@@ -21,6 +24,16 @@ export default function WidgetRuntime({ params }: { params: { section: string } 
       setCfg(null)
     }
   }, [sp])
+
+  // Track widget view (temporarily disabled)
+  // useEffect(() => {
+  //   if (cfg && params.section) {
+  //     trackView(params.section, undefined, {
+  //       hasConfig: !!cfg,
+  //       configKeys: Object.keys(cfg),
+  //     })
+  //   }
+  // }, [cfg, params.section, trackView])
 
   const typography = cfg?.typography || {}
   const animation = cfg?.animation || {}
@@ -55,30 +68,18 @@ export default function WidgetRuntime({ params }: { params: { section: string } 
     .sort((a, b) => a.goal - b.goal)
   const initialCap = Number((cfg as any)?.currentCap ?? (cfg as any)?.chart?.currentCap ?? 250000)
   const [liveCap, setLiveCap] = useState<number>(initialCap)
-  useEffect(() => {
-    if (params.section !== "market-cap") return
-    let mounted = true
-    const endpoint = (cfg as any)?.endpoints?.marketCap as string | undefined
-    const tick = async () => {
-      try {
-        if (endpoint) {
-          const res = await fetch(endpoint, { cache: "no-store" })
-          if (!res.ok) throw new Error("bad status")
-          const data = await res.json()
-          if (mounted && typeof data.cap === "number") setLiveCap(data.cap)
-        } else {
-          // fallback demo drift
-          setLiveCap((c) => Math.max(1_000, Math.round(c * (1 + (Math.random() - 0.5) * 0.02))))
+  
+  // Real-time market cap data via SSE
+  const { data: marketCapData } = useSSE(
+    params.section === "market-cap" ? "/api/stream/marketcap" : "",
+    {
+      onMessage: (data) => {
+        if (data.mc && typeof data.mc === "number") {
+          setLiveCap(data.mc)
         }
-      } catch {
-        // fallback demo drift on error
-        setLiveCap((c) => Math.max(1_000, Math.round(c * (1 + (Math.random() - 0.5) * 0.02))))
       }
     }
-    tick()
-    const id = setInterval(tick, 5000)
-    return () => { mounted = false; clearInterval(id) }
-  }, [params.section, cfg])
+  )
 
   const topGoal = numericGoals[numericGoals.length - 1]?.goal || Math.max(1, liveCap)
   const pct = Math.max(0, Math.min(100, (liveCap / topGoal) * 100))
@@ -104,112 +105,65 @@ export default function WidgetRuntime({ params }: { params: { section: string } 
   const mm = String(Math.floor((secondsLeft % 3600) / 60)).padStart(2, "0")
   const ss = String(secondsLeft % 60).padStart(2, "0")
 
-  // Donations total polling
+  // Donations total via SSE
   const [donTotal, setDonTotal] = useState<number>(0)
-  useEffect(() => {
-    if (params.section !== "donations") return
-    let mounted = true
-    const endpoint = (cfg as any)?.endpoints?.donations as string | undefined
-    const tick = async () => {
-      try {
-        if (endpoint) {
-          const res = await fetch(endpoint, { cache: "no-store" })
-          if (!res.ok) throw new Error("bad status")
-          const data = await res.json()
-          if (mounted && typeof data.total === "number") setDonTotal(data.total)
-        } else {
-          setDonTotal((t) => t + Math.random() * 0.05)
+  const { data: donationsData } = useSSE(
+    params.section === "donations" ? "/api/stream/donations" : "",
+    {
+      onMessage: (data) => {
+        if (data.totalUsd && typeof data.totalUsd === "number") {
+          setDonTotal(data.totalUsd)
         }
-      } catch {
-        setDonTotal((t) => t + Math.random() * 0.02)
       }
     }
-    tick()
-    const id = setInterval(tick, 7000)
-    return () => { mounted = false; clearInterval(id) }
-  }, [params.section, cfg])
+  )
 
-  // Buy Bot recent buys polling
+  // Buy Bot recent buys via SSE
   type Buy = { user: string; amount: number }
   const [buys, setBuys] = useState<Buy[]>([])
-  useEffect(() => {
-    if (params.section !== "buy-bot") return
-    let mounted = true
-    const endpoint = (cfg as any)?.endpoints?.buys as string | undefined
-    const tick = async () => {
-      try {
-        if (endpoint) {
-          const res = await fetch(endpoint, { cache: "no-store" })
-          if (!res.ok) throw new Error("bad status")
-          const data = await res.json()
-          if (mounted && Array.isArray(data.buys)) setBuys(data.buys.slice(0, 3))
-        } else {
-          setBuys((prev) => [{ user: "Yje2ax", amount: Number((cfg?.buyAmounts?.[0] || 500)) }, ...prev].slice(0, 3))
+  const { data: buysData } = useSSE(
+    params.section === "buy-bot" ? "/api/stream/buys" : "",
+    {
+      onMessage: (data) => {
+        if (data.lastBuy) {
+          setBuys((prev) => [
+            { user: data.lastBuy.wallet.slice(0, 6), amount: data.lastBuy.amount },
+            ...prev
+          ].slice(0, 3))
         }
-      } catch {
-        setBuys((prev) => prev)
       }
     }
-    tick()
-    const id = setInterval(tick, 6000)
-    return () => { mounted = false; clearInterval(id) }
-  }, [params.section, cfg])
+  )
 
-  // Chat messages polling
+  // Chat messages via SSE
   type Msg = { user: string; text: string }
   const [messages, setMessages] = useState<Msg[]>([])
-  useEffect(() => {
-    if (params.section !== "chat-widget") return
-    let mounted = true
-    const endpoint = (cfg as any)?.endpoints?.chat as string | undefined
-    const tick = async () => {
-      try {
-        if (endpoint) {
-          const res = await fetch(endpoint, { cache: "no-store" })
-          if (!res.ok) throw new Error("bad status")
-          const data = await res.json()
-          if (mounted && Array.isArray(data.messages)) setMessages(data.messages.slice(-20))
-        } else {
-          const seed: Msg[] = [
-            { user: "DiamondHands", text: "Paper hands get rekt." },
-            { user: "CryptoChad", text: "This is going to the moon!" },
-            { user: "PepeLover", text: "WAGMI" },
-          ]
-          setMessages(seed)
+  const { data: chatData } = useSSE(
+    params.section === "chat-widget" ? "/api/stream/chat" : "",
+    {
+      onMessage: (data) => {
+        if (data.message && data.user) {
+          setMessages((prev) => [
+            ...prev,
+            { user: data.user, text: data.message }
+          ].slice(-20))
         }
-      } catch {
-        // keep current
       }
     }
-    tick()
-    const id = setInterval(tick, 8000)
-    return () => { mounted = false; clearInterval(id) }
-  }, [params.section, cfg])
+  )
 
-  // Burn goals polling for current burnt amount
+  // Burn goals via SSE
   const [currentBurn, setCurrentBurn] = useState<number>(Number((cfg as any)?.currentBurn ?? (cfg as any)?.burn?.progressBarStart ?? 0))
-  useEffect(() => {
-    if (params.section !== "burn-goals") return
-    let mounted = true
-    const endpoint = (cfg as any)?.endpoints?.burn as string | undefined
-    const tick = async () => {
-      try {
-        if (endpoint) {
-          const res = await fetch(endpoint, { cache: "no-store" })
-          if (!res.ok) throw new Error("bad status")
-          const data = await res.json()
-          if (mounted && typeof data.burn === "number") setCurrentBurn(data.burn)
-        } else {
-          setCurrentBurn((b) => b + Math.round(Math.random() * 1000))
+  const { data: burnData } = useSSE(
+    params.section === "burn-goals" ? "/api/stream/burn" : "",
+    {
+      onMessage: (data) => {
+        if (data.burned && typeof data.burned === "number") {
+          setCurrentBurn(data.burned)
         }
-      } catch {
-        setCurrentBurn((b) => b + Math.round(Math.random() * 500))
       }
     }
-    tick()
-    const id = setInterval(tick, 9000)
-    return () => { mounted = false; clearInterval(id) }
-  }, [params.section, cfg])
+  )
 
   return (
     <div className="w-screen h-screen overflow-hidden" style={{ background: "transparent" }}>
