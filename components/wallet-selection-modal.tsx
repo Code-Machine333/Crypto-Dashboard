@@ -19,7 +19,6 @@ export function WalletSelectionModal({ isOpen, onClose, onWalletSelect }: Wallet
     setIsConnecting(true)
     
     try {
-      // Simulate wallet connection delay
       await new Promise(resolve => setTimeout(resolve, 1000))
       
       // Call the parent handler
