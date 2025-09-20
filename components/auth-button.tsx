@@ -14,16 +14,16 @@ export function AuthButton() {
         Loading...
       </Button>
     )
-  }
+  }      
 
-  if (session) {
+  if (session) {     
     return (
       <div className="flex items-center gap-2">
         <span className="text-sm text-gray-600 dark:text-gray-400">
           {session.user?.email}
-        </span>
+        </span>          
         <Button 
-          variant="outline" 
+          variant="outline"    
           size="sm"
           onClick={() => signOut({ callbackUrl: "/" })}
         >
@@ -34,7 +34,7 @@ export function AuthButton() {
     )
   }
 
-  return (
+  return (             
     <Button asChild>
       <a href="/auth/signin">
         <User className="w-4 h-4 mr-2" />
