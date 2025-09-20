@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCryptoPrices, getCryptoPrice } from '@/lib/crypto-data'
+import { getCryptoPrices } from '@/lib/crypto-data'
 
 export async function GET(request: NextRequest) {
   try {
@@ -7,8 +7,9 @@ export async function GET(request: NextRequest) {
     const symbol = searchParams.get('symbol')
     
     if (symbol) {
-      // Get specific crypto price
-      const price = await getCryptoPrice(symbol)
+      // Get specific crypto price from all prices
+      const prices = await getCryptoPrices()
+      const price = prices.find(p => p.symbol === symbol)
       if (!price) {
         return NextResponse.json(
           { error: 'Cryptocurrency not found' },
