@@ -1,5 +1,3 @@
-import { WebSocket } from 'ws'
-
 export interface CryptoPrice {
   symbol: string
   price: number
@@ -15,93 +13,33 @@ export interface CryptoData {
   lastUpdated: Date
 }
 
+// Simple crypto data service without WebSocket for now
 class CryptoDataService {
-  private ws: WebSocket | null = null
   private subscribers: Set<(data: CryptoData) => void> = new Set()
-  private reconnectInterval: NodeJS.Timeout | null = null
-  private isConnected = false
+  private updateInterval: NodeJS.Timeout | null = null
+  private isRunning = false
 
   constructor() {
-    this.connect()
+    // Start polling for updates every 30 seconds
+    this.startPolling()
   }
 
-  private connect() {
-    try {
-      // Using CoinGecko WebSocket API (free tier)
-      this.ws = new WebSocket('wss://ws.coingecko.com/v3/ws')
-      
-      this.ws.on('open', () => {
-        console.log('Connected to CoinGecko WebSocket')
-        this.isConnected = true
-        this.subscribeToPrices()
-      })
-
-      this.ws.on('message', (data) => {
-        try {
-          const message = JSON.parse(data.toString())
-          if (message.type === 'price') {
-            this.handlePriceUpdate(message.data)
-          }
-        } catch (error) {
-          console.error('Error parsing WebSocket message:', error)
+  private startPolling() {
+    if (this.isRunning) return
+    
+    this.isRunning = true
+    this.updateInterval = setInterval(async () => {
+      try {
+        const prices = await this.getCurrentPrices()
+        const cryptoData: CryptoData = {
+          prices,
+          lastUpdated: new Date()
         }
-      })
-
-      this.ws.on('close', () => {
-        console.log('WebSocket connection closed')
-        this.isConnected = false
-        this.scheduleReconnect()
-      })
-
-      this.ws.on('error', (error) => {
-        console.error('WebSocket error:', error)
-        this.isConnected = false
-        this.scheduleReconnect()
-      })
-    } catch (error) {
-      console.error('Failed to connect to WebSocket:', error)
-      this.scheduleReconnect()
-    }
-  }
-
-  private subscribeToPrices() {
-    if (this.ws && this.isConnected) {
-      // Subscribe to top cryptocurrencies
-      const symbols = ['bitcoin', 'ethereum', 'binancecoin', 'cardano', 'solana', 'polkadot', 'chainlink', 'litecoin']
-      
-      this.ws.send(JSON.stringify({
-        type: 'subscribe',
-        channels: ['prices']
-      }))
-    }
-  }
-
-  private handlePriceUpdate(data: any) {
-    const cryptoData: CryptoData = {
-      prices: data.map((item: any) => ({
-        symbol: item.id,
-        price: item.current_price,
-        change24h: item.price_change_24h,
-        changePercent24h: item.price_change_percentage_24h,
-        volume24h: item.total_volume,
-        marketCap: item.market_cap,
-        lastUpdated: new Date()
-      })),
-      lastUpdated: new Date()
-    }
-
-    this.notifySubscribers(cryptoData)
-  }
-
-  private scheduleReconnect() {
-    if (this.reconnectInterval) {
-      clearTimeout(this.reconnectInterval)
-    }
-
-    this.reconnectInterval = setTimeout(() => {
-      console.log('Attempting to reconnect to WebSocket...')
-      this.connect()
-    }, 5000)
+        this.notifySubscribers(cryptoData)
+      } catch (error) {
+        console.error('Error polling crypto prices:', error)
+      }
+    }, 30000) // Update every 30 seconds
   }
 
   private notifySubscribers(data: CryptoData) {
@@ -143,17 +81,12 @@ class CryptoDataService {
   }
 
   public disconnect() {
-    if (this.ws) {
-      this.ws.close()
-      this.ws = null
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval)
+      this.updateInterval = null
     }
     
-    if (this.reconnectInterval) {
-      clearTimeout(this.reconnectInterval)
-      this.reconnectInterval = null
-    }
-    
-    this.isConnected = false
+    this.isRunning = false
   }
 }
 
